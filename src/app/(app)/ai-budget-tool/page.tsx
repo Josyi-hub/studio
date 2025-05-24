@@ -1,18 +1,20 @@
+
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react'; // Added useEffect
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Label } from "@/components/ui/label"; // Input removed
+import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, Wand2, Info, Settings } from "lucide-react"; // Settings icon added
+import { Loader2, Wand2, Info, Settings } from "lucide-react";
 import Link from 'next/link';
 import useLocalStorage from "@/hooks/use-local-storage";
-import type { Expense, Budget, AppSettings, CategoryName } from "@/lib/types"; // AppSettings added, MonthlyIncome removed
-import { EXPENSE_CATEGORIES, DEFAULT_APP_SETTINGS } from "@/lib/constants"; // DEFAULT_APP_SETTINGS added
+import type { Expense, Budget, AppSettings, CategoryName } from "@/lib/types";
+import { EXPENSE_CATEGORIES, DEFAULT_APP_SETTINGS } from "@/lib/constants";
 import { suggestBudgetAdjustments, type SuggestBudgetAdjustmentsInput, type SuggestBudgetAdjustmentsOutput } from '@/ai/flows/suggest-budget-adjustments';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
 export default function AiBudgetToolPage() {
   const [expenses] = useLocalStorage<Expense[]>('expenses', []);
@@ -22,6 +24,11 @@ export default function AiBudgetToolPage() {
   const [suggestions, setSuggestions] = useState<Record<string, string> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const aggregatedExpenses = useMemo(() => {
     const agg: Record<CategoryName, number> = {} as Record<CategoryName, number>;
@@ -56,7 +63,7 @@ export default function AiBudgetToolPage() {
     setSuggestions(null);
 
     const input: SuggestBudgetAdjustmentsInput = {
-      income: appSettings.monthlyIncome, // Use income from appSettings
+      income: appSettings.monthlyIncome,
       expenses: aggregatedExpenses,
       budgetGoals: currentBudgetGoals,
     };
@@ -92,11 +99,13 @@ export default function AiBudgetToolPage() {
           <CardTitle className="flex items-center"><Wand2 className="mr-2 h-6 w-6 text-primary" /> AI Budget Advisor</CardTitle>
           <CardDescription>
             Get personalized budget adjustment suggestions powered by AI based on your income, spending habits, and goals.
-            Ensure your expenses and budgets are up-to-date for the best advice. Your current income is set to {formatCurrency(appSettings.monthlyIncome, appSettings.language, appSettings.currency)}.
+            Ensure your expenses and budgets are up-to-date for the best advice. 
+            {!isClient && <Skeleton className="inline-block h-4 w-48" />}
+            {isClient && `Your current income is set to ${formatCurrency(appSettings.monthlyIncome, appSettings.language, appSettings.currency)}.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {appSettings.monthlyIncome <= 0 && (
+          {isClient && appSettings.monthlyIncome <= 0 && (
              <Alert variant="warning">
               <Info className="h-4 w-4" />
               <AlertTitle>Monthly Income Not Set</AlertTitle>
@@ -105,7 +114,17 @@ export default function AiBudgetToolPage() {
               </AlertDescription>
             </Alert>
           )}
-          <Button onClick={handleGetSuggestions} disabled={isLoading || appSettings.monthlyIncome <= 0} className="w-full md:w-auto text-base py-3 px-6">
+          {!isClient && (
+             <Alert variant="warning">
+              <Info className="h-4 w-4" />
+              <AlertTitle><Skeleton className="h-4 w-40" /></AlertTitle>
+              <AlertDescription>
+                 <Skeleton className="h-4 w-full mb-1" />
+                 <Skeleton className="h-4 w-3/4" />
+              </AlertDescription>
+            </Alert>
+          )}
+          <Button onClick={handleGetSuggestions} disabled={isLoading || (isClient && appSettings.monthlyIncome <= 0) || !isClient} className="w-full md:w-auto text-base py-3 px-6">
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -141,7 +160,7 @@ export default function AiBudgetToolPage() {
           </CardContent>
         </Card>
       )}
-       {!isLoading && !suggestions && appSettings.monthlyIncome > 0 && (
+       {!isLoading && !suggestions && isClient && appSettings.monthlyIncome > 0 && (
          <Alert variant="default" className="bg-accent/10 border-accent/30 text-accent-foreground">
            <Info className="h-4 w-4 text-accent" />
            <AlertTitle>Ready to Optimize?</AlertTitle>
@@ -153,6 +172,19 @@ export default function AiBudgetToolPage() {
            </AlertDescription>
          </Alert>
        )}
+        {!isLoading && !suggestions && !isClient && (
+          <Alert variant="default" className="bg-accent/10 border-accent/30 text-accent-foreground">
+           <Info className="h-4 w-4 text-accent" />
+           <AlertTitle><Skeleton className="h-5 w-36" /></AlertTitle>
+           <AlertDescription>
+             <Skeleton className="h-4 w-full mb-1" />
+             <Skeleton className="h-4 w-full mb-1" />
+             <Skeleton className="h-4 w-3/4" />
+           </AlertDescription>
+         </Alert>
+        )}
     </div>
   );
 }
+
+    

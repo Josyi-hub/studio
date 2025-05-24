@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react'; // Added useState, useEffect
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
@@ -9,8 +10,9 @@ import type { Expense, Budget, CategoryName, ChartDataPoint, AppSettings } from 
 import { EXPENSE_CATEGORIES, CATEGORIES_CONFIG, DEFAULT_APP_SETTINGS } from "@/lib/constants";
 import { TrendingUp, PieChart as PieChartIcon } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
-const RenderActiveShape = (props: any) => { // Renamed to avoid conflict, ensure it's capitalized for a component
+const RenderActiveShape = (props: any) => { 
   const RADIAN = Math.PI / 180;
   const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value, language, currency } = props;
   const sin = Math.sin(-RADIAN * midAngle);
@@ -62,12 +64,19 @@ export default function ReportsPage() {
   const [budgets] = useLocalStorage<Budget[]>('budgets', EXPENSE_CATEGORIES.map(c => ({ id: c.name, category: c.name, amount: 0 })));
   const [appSettings] = useLocalStorage<AppSettings>('appSettings', DEFAULT_APP_SETTINGS);
   const [activeIndex, setActiveIndex] = React.useState(0);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const onPieEnter = (_: any, index: number) => {
     setActiveIndex(index);
   };
 
   const spendingByCategory: ChartDataPoint[] = useMemo(() => {
+    if (!isClient) return []; 
+
     const categoryTotals: Record<CategoryName, number> = {} as Record<CategoryName, number>;
     EXPENSE_CATEGORIES.forEach(cat => categoryTotals[cat.name] = 0);
 
@@ -77,18 +86,27 @@ export default function ReportsPage() {
       }
     });
     
-    // Note: getComputedStyle might cause hydration issues if styles are not ready on server/initial client render.
-    // Consider moving color resolution to a useEffect if problems arise.
-    return EXPENSE_CATEGORIES.map(cat => ({
-      name: cat.name,
-      value: categoryTotals[cat.name] || 0,
-      fill: typeof window !== 'undefined' && CATEGORIES_CONFIG[cat.name]?.color.startsWith('var(') ? 
-            `hsl(${getComputedStyle(document.documentElement).getPropertyValue(CATEGORIES_CONFIG[cat.name]?.color.slice(4, -1)).trim()})` : 
-            CATEGORIES_CONFIG[cat.name]?.color,
-    })).filter(item => item.value > 0);
-  }, [expenses]);
+    return EXPENSE_CATEGORIES.map(cat => {
+      const colorConfig = CATEGORIES_CONFIG[cat.name];
+      let fillColor = colorConfig?.color;
+      if (colorConfig?.color && colorConfig.color.startsWith('var(') && typeof window !== 'undefined') {
+         try {
+            fillColor = `hsl(${getComputedStyle(document.documentElement).getPropertyValue(colorConfig.color.slice(4, -1)).trim()})`;
+         } catch (e) {
+            console.warn("Could not compute style for chart color", e);
+            // Use default color if var cannot be resolved
+         }
+      }
+      return {
+        name: cat.name,
+        value: categoryTotals[cat.name] || 0,
+        fill: fillColor || '#8884d8', // Fallback fill color
+      };
+    }).filter(item => item.value > 0);
+  }, [expenses, isClient]);
 
   const budgetVsActualData = useMemo(() => {
+    if (!isClient) return [];
     return budgets.filter(b => b.amount > 0).map(budget => {
       const actualSpending = expenses
         .filter(exp => exp.category === budget.category)
@@ -97,14 +115,27 @@ export default function ReportsPage() {
         name: budget.category,
         budget: budget.amount,
         actual: actualSpending,
+        // Recharts might not directly support CSS variables in `fill`.
+        // If these are var(--some-css-var), they might need to be resolved to HSL/HEX in JS like spendingByCategory.
+        // For now, assuming these theme variables are directly usable or simple colors.
         fillBudget: 'hsl(var(--primary) / 0.6)',
         fillActual: 'hsl(var(--accent))',
       };
     });
-  }, [budgets, expenses]);
+  }, [budgets, expenses, isClient]);
 
 
-  if (expenses.length === 0 && budgets.filter(b => b.amount > 0).length === 0) {
+  if (!isClient && (expenses.length === 0 && budgets.filter(b => b.amount > 0).length === 0)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] text-center">
+        <TrendingUp className="mx-auto h-16 w-16 text-muted-foreground mb-6" />
+        <Skeleton className="h-6 w-48 mb-2" />
+        <Skeleton className="h-4 w-64" />
+      </div>
+    );
+  }
+  
+  if (isClient && expenses.length === 0 && budgets.filter(b => b.amount > 0).length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] text-center">
         <TrendingUp className="mx-auto h-16 w-16 text-muted-foreground mb-6" />
@@ -120,6 +151,38 @@ export default function ReportsPage() {
     <RenderActiveShape {...props} language={appSettings.language} currency={appSettings.currency} />
   );
 
+  const renderChartSkeletons = () => (
+     <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-40 mb-1" />
+            <Skeleton className="h-4 w-56" />
+          </CardHeader>
+          <CardContent className="flex items-center justify-center h-[350px]">
+            <Skeleton className="h-56 w-56 rounded-full" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48 mb-1" />
+            <Skeleton className="h-4 w-64" />
+          </CardHeader>
+          <CardContent className="h-[350px] flex flex-col justify-end">
+            <div className="flex items-end h-full gap-4 px-4">
+                <Skeleton className="h-[60%] w-10" />
+                <Skeleton className="h-[80%] w-10" />
+                <Skeleton className="h-[40%] w-10" />
+                <Skeleton className="h-[70%] w-10" />
+            </div>
+             <Skeleton className="h-2 w-full mt-2" /> {/* X-axis line */}
+          </CardContent>
+        </Card>
+    </div>
+  );
+
+  if (!isClient) {
+    return renderChartSkeletons();
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -144,7 +207,7 @@ export default function ReportsPage() {
                   onMouseEnter={onPieEnter}
                 >
                   {spendingByCategory.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill || '#8884d8'} /> // Added fallback fill
+                    <Cell key={`cell-${index}`} fill={entry.fill || '#8884d8'} />
                   ))}
                 </Pie>
                 <Tooltip formatter={(value: number) => formatCurrency(value, appSettings.language, appSettings.currency)} />
@@ -173,9 +236,9 @@ export default function ReportsPage() {
               <XAxis dataKey="name" stroke="hsl(var(--foreground))" tick={{ fontSize: 12 }} />
               <YAxis 
                 stroke="hsl(var(--foreground))" 
-                tickFormatter={(value) => formatCurrency(value, appSettings.language, appSettings.currency).replace(/\.00$/, '')} // Basic attempt to shorten if no decimals
+                tickFormatter={(value) => formatCurrency(value, appSettings.language, appSettings.currency).replace(/\.00$/, '')} 
                 tick={{ fontSize: 12 }} 
-                width={80} // Adjust width for potentially longer currency strings
+                width={80} 
               />
               <Tooltip 
                 formatter={(value: number, name: string) => [formatCurrency(value, appSettings.language, appSettings.currency), name === 'budget' ? 'Budgeted' : 'Actual Spending']}
@@ -200,3 +263,5 @@ export default function ReportsPage() {
     </div>
   );
 }
+
+    

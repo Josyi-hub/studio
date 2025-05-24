@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Added useEffect
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -22,6 +23,7 @@ import { EXPENSE_CATEGORIES, getCategoryIcon, DEFAULT_APP_SETTINGS } from "@/lib
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
 const expenseSchema = z.object({
   id: z.string().optional(),
@@ -39,6 +41,11 @@ export default function ExpensesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const { toast } = useToast();
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const form = useForm<ExpenseFormData>({
     resolver: zodResolver(expenseSchema),
@@ -108,7 +115,13 @@ export default function ExpensesPage() {
         </Button>
       </CardHeader>
       <CardContent>
-        {expenses.length === 0 ? (
+        {!isClient && expenses.length === 0 ? (
+          <div className="text-center py-10">
+             <CreditCard className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+             <Skeleton className="h-4 w-48 mx-auto mb-2" />
+             <Skeleton className="h-3 w-64 mx-auto" />
+          </div>
+        ) : expenses.length === 0 ? (
           <div className="text-center py-10">
             <CreditCard className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-muted-foreground">No expenses recorded yet.</p>
@@ -126,29 +139,46 @@ export default function ExpensesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {expenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime() ).map((expense) => {
-              const CategoryIcon = getCategoryIcon(expense.category);
-              return (
-              <TableRow key={expense.id}>
-                <TableCell>{format(parseISO(expense.date), "PP")}</TableCell>
-                <TableCell className="font-medium">{expense.description || expense.category}</TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="flex items-center gap-1 w-fit">
-                    <CategoryIcon className="h-3 w-3" />
-                    {expense.category}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">{formatCurrency(expense.amount, appSettings.language, appSettings.currency)}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => openEditDialog(expense)}>
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="text-destructive hover:text-destructive">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            )})}
+            {!isClient ? (
+              [...Array(5)].map((_, i) => (
+                <TableRow key={`skeleton-${i}`}>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Skeleton className="h-8 w-8 rounded" />
+                      <Skeleton className="h-8 w-8 rounded" />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              expenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime() ).map((expense) => {
+                const CategoryIcon = getCategoryIcon(expense.category);
+                return (
+                <TableRow key={expense.id}>
+                  <TableCell>{format(parseISO(expense.date), "PP")}</TableCell>
+                  <TableCell className="font-medium">{expense.description || expense.category}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="flex items-center gap-1 w-fit">
+                      <CategoryIcon className="h-3 w-3" />
+                      {expense.category}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">{formatCurrency(expense.amount, appSettings.language, appSettings.currency)}</TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" onClick={() => openEditDialog(expense)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id)} className="text-destructive hover:text-destructive">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )})
+            )}
           </TableBody>
         </Table>
         )}
@@ -238,3 +268,5 @@ export default function ExpensesPage() {
     </Card>
   );
 }
+
+    
