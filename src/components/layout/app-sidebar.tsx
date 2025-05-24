@@ -12,8 +12,9 @@ import {
   SidebarMenuButton,
   SidebarFooter,
   SidebarTrigger,
+  useSidebar, // Import useSidebar
 } from '@/components/ui/sidebar';
-import { SheetTitle } from '@/components/ui/sheet'; // Added import for SheetTitle
+import { SheetTitle } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { APP_NAME } from '@/lib/constants';
 import { Home, LogOut, Settings, BarChart3, Sparkles, ShoppingBag, PiggyBank } from 'lucide-react';
@@ -35,6 +36,7 @@ export function AppSidebar() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
+  const { isMobile } = useSidebar(); // Get isMobile state
 
   const handleLogout = async () => {
     try {
@@ -46,14 +48,16 @@ export function AppSidebar() {
     }
   };
 
+  const AppTitleComponent = isMobile ? SheetTitle : 'span';
+
   return (
     <Sidebar collapsible="icon" variant="sidebar" side="left">
       <SidebarHeader className="p-4 flex items-center justify-between">
          <Link href="/dashboard" className="flex items-center gap-2">
             <PiggyBank className="h-8 w-8 text-primary" />
-            <SheetTitle className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">
+            <AppTitleComponent className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">
               {APP_NAME}
-            </SheetTitle>
+            </AppTitleComponent>
           </Link>
         <div className="md:hidden">
           <SidebarTrigger />
