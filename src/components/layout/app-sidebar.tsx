@@ -1,5 +1,4 @@
 
-// @ts-nocheck
 "use client";
 
 import Link from 'next/link';
@@ -14,9 +13,10 @@ import {
   SidebarFooter,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
+import { SheetTitle } from '@/components/ui/sheet'; // Added import for SheetTitle
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { APP_NAME } from '@/lib/constants';
-import { Home, LogOut, Settings, BarChart3, Sparkles, ShoppingBag, PiggyBank } from 'lucide-react'; 
+import { Home, LogOut, Settings, BarChart3, Sparkles, ShoppingBag, PiggyBank } from 'lucide-react';
 import { Separator } from '../ui/separator';
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
@@ -51,9 +51,9 @@ export function AppSidebar() {
       <SidebarHeader className="p-4 flex items-center justify-between">
          <Link href="/dashboard" className="flex items-center gap-2">
             <PiggyBank className="h-8 w-8 text-primary" />
-            <h1 className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">
+            <SheetTitle className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">
               {APP_NAME}
-            </h1>
+            </SheetTitle>
           </Link>
         <div className="md:hidden">
           <SidebarTrigger />
