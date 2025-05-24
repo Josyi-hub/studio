@@ -1,51 +1,62 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react'; // Added useState, useEffect
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, Save, Trash2, Globe, Banknote as CurrencyIcon } from "lucide-react";
-import useLocalStorage from "@/hooks/use-local-storage";
+import { DollarSign, Save, Trash2, Globe, Banknote as CurrencyIcon, Loader2 } from "lucide-react";
+import { useUserAppSettings } from "@/hooks/use-user-app-settings";
 import type { AppSettings } from "@/lib/types";
 import { DEFAULT_APP_SETTINGS, SUPPORTED_CURRENCIES, SUPPORTED_LANGUAGES } from "@/lib/constants";
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/contexts/auth-context';
+import { useRouter } from 'next/navigation';
+
 
 export default function SettingsPage() {
-  const [appSettings, setAppSettings] = useLocalStorage<AppSettings>('appSettings', DEFAULT_APP_SETTINGS);
-  const [isClient, setIsClient] = useState(false);
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const { appSettings: currentSettings, setAppSettings: saveAppSettings, loading: settingsLoading, error: settingsError } = useUserAppSettings();
   
-  // Temporary states for form inputs, initialized once isClient is true
   const [tempIncome, setTempIncome] = React.useState<string>('');
   const [tempCurrency, setTempCurrency] = React.useState<string>('');
   const [tempLanguage, setTempLanguage] = React.useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const { toast } = useToast();
 
   useEffect(() => {
-    setIsClient(true);
-  }, []);
+    if (!authLoading && !user) {
+      router.push('/login'); // Redirect if not authenticated
+    }
+  }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (isClient) {
-      setTempIncome(appSettings.monthlyIncome.toString());
-      setTempCurrency(appSettings.currency);
-      setTempLanguage(appSettings.language);
+    if (currentSettings) {
+      setTempIncome(currentSettings.monthlyIncome.toString());
+      setTempCurrency(currentSettings.currency);
+      setTempLanguage(currentSettings.language);
     }
-  }, [appSettings, isClient]);
+  }, [currentSettings]);
 
-  const handleIncomeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTempIncome(e.target.value);
-  };
+  useEffect(() => {
+    if (settingsError) {
+      toast({ title: "Settings Error", description: `Could not load settings: ${settingsError.message}`, variant: "destructive" });
+    }
+  }, [settingsError, toast]);
 
-  const handleSaveSettings = () => {
+
+  const handleSaveSettings = async () => {
+    setIsSaving(true);
     const newIncomeAmount = parseFloat(tempIncome);
     if (isNaN(newIncomeAmount) || newIncomeAmount < 0) {
       toast({ title: "Invalid Income Amount", description: "Please enter a valid positive number for income.", variant: "destructive" });
+      setIsSaving(false);
       return;
     }
     const newSettings: AppSettings = {
@@ -53,19 +64,69 @@ export default function SettingsPage() {
       currency: tempCurrency,
       language: tempLanguage,
     };
-    setAppSettings(newSettings);
-    toast({ title: "Settings Updated", description: `Settings saved. Income: ${formatCurrency(newIncomeAmount, newSettings.language, newSettings.currency)}` });
+    try {
+      await saveAppSettings(newSettings);
+      toast({ title: "Settings Updated", description: `Settings saved. Income: ${formatCurrency(newIncomeAmount, newSettings.language, newSettings.currency)}` });
+    } catch (error: any) {
+       toast({ title: "Save Error", description: `Could not save settings: ${error.message}`, variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
   };
   
   const handleClearAllData = () => {
-    if (window.confirm("Are you sure you want to clear ALL SpendWise data? This action cannot be undone.")) {
-      localStorage.removeItem('expenses');
-      localStorage.removeItem('budgets');
-      localStorage.removeItem('appSettings');
-      window.location.reload(); 
-      toast({ title: "Data Cleared", description: "All application data has been removed.", variant: "destructive" });
-    }
+    // This needs to be re-thought with Firestore. 
+    // For now, it's a placeholder or would require more complex Firebase functions to clear user data.
+    // For simplicity, I will comment this out, as clearing specific user data in Firestore from client is not straightforward and risky.
+    toast({ title: "Action Not Implemented", description: "Clearing all data from Firestore is a sensitive operation and not implemented in this version.", variant: "default" });
+    // if (window.confirm("Are you sure you want to clear ALL SpendWise data for your account? This action cannot be undone.")) {
+    //   // Firestore data clearing logic would go here (potentially a Firebase Function call)
+    //   toast({ title: "Data Cleared", description: "All application data for your account has been removed.", variant: "destructive" });
+    // }
   };
+  
+  const isLoading = authLoading || settingsLoading;
+
+  if (isLoading && !currentSettings) { // Show full page skeleton if initial load and no data yet
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-8 w-1/2" />
+            <Skeleton className="h-4 w-3/4" />
+          </CardHeader>
+          <CardContent className="space-y-8 p-6">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="space-y-3 p-4 border rounded-lg">
+                <Skeleton className="h-6 w-1/3 mb-1" />
+                <Skeleton className="h-4 w-full mb-2" />
+                <Skeleton className="h-10 w-1/2" />
+              </div>
+            ))}
+          </CardContent>
+          <CardFooter>
+            <Skeleton className="h-10 w-32" />
+          </CardFooter>
+        </Card>
+         <Card>
+          <CardHeader>
+            <Skeleton className="h-8 w-1/3 text-destructive" />
+            <Skeleton className="h-4 w-1/2" />
+          </CardHeader>
+          <CardContent>
+             <div className="space-y-3 p-4 border border-destructive rounded-lg">
+              <Skeleton className="h-6 w-1/2 mb-1" />
+              <Skeleton className="h-4 w-full mb-1" />
+              <Skeleton className="h-4 w-3/4 mb-2" />
+              <Skeleton className="h-10 w-28" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  
+  if (!user && !authLoading) return null; // Or a message prompting to login
 
   return (
     <div className="space-y-6">
@@ -83,7 +144,7 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground">
               Set your primary monthly income. This is used for calculations and AI suggestions.
             </p>
-            {!isClient ? (
+            {isLoading ? (
               <Skeleton className="h-10 w-full max-w-xs" />
             ) : (
               <Input
@@ -92,9 +153,9 @@ export default function SettingsPage() {
                 step="100"
                 placeholder="e.g., 3000"
                 value={tempIncome}
-                onChange={handleIncomeChange}
+                onChange={(e) => setTempIncome(e.target.value)}
                 className="max-w-xs"
-                disabled={!isClient}
+                disabled={isLoading || isSaving}
               />
             )}
           </div>
@@ -107,10 +168,10 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground">
               Choose your preferred currency for displaying amounts.
             </p>
-            {!isClient ? (
+            {isLoading ? (
               <Skeleton className="h-10 w-full max-w-xs" />
             ) : (
-              <Select value={tempCurrency} onValueChange={setTempCurrency} disabled={!isClient}>
+              <Select value={tempCurrency} onValueChange={setTempCurrency} disabled={isLoading || isSaving}>
                 <SelectTrigger className="max-w-xs">
                   <SelectValue placeholder="Select currency" />
                 </SelectTrigger>
@@ -134,12 +195,12 @@ export default function SettingsPage() {
               Language
             </Label>
             <p className="text-sm text-muted-foreground">
-              Choose your display language (affects number/currency formatting). Full UI translation is progressive.
+              Choose your display language (affects number/currency formatting and AI responses).
             </p>
-            {!isClient ? (
+            {isLoading ? (
               <Skeleton className="h-10 w-full max-w-xs" />
             ) : (
-              <Select value={tempLanguage} onValueChange={setTempLanguage} disabled={!isClient}>
+              <Select value={tempLanguage} onValueChange={setTempLanguage} disabled={isLoading || isSaving}>
                 <SelectTrigger className="max-w-xs">
                   <SelectValue placeholder="Select language" />
                 </SelectTrigger>
@@ -157,12 +218,13 @@ export default function SettingsPage() {
             )}
           </div>
           
-          <Button onClick={handleSaveSettings} className="w-full md:w-auto" disabled={!isClient}>
-            <Save className="mr-2 h-4 w-4" /> Save All Settings
+          <Button onClick={handleSaveSettings} className="w-full md:w-auto" disabled={isLoading || isSaving}>
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+             {isSaving ? "Saving..." : "Save All Settings"}
           </Button>
         </CardContent>
       </Card>
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle className="text-destructive">Danger Zone</CardTitle>
           <CardDescription>Be careful with actions in this section.</CardDescription>
@@ -176,14 +238,12 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground">
               This will permanently delete all your expenses, budgets, and application settings stored in this browser. This action cannot be undone.
             </p>
-            <Button variant="destructive" onClick={handleClearAllData} disabled={!isClient}>
+            <Button variant="destructive" onClick={handleClearAllData} disabled={isLoading || isSaving}>
               Clear All Data
             </Button>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
     </div>
   );
 }
-
-    

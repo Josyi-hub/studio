@@ -1,30 +1,38 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react'; // Added useState, useEffect
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowUpRight, DollarSign, CreditCard, Target, PlusCircle } from "lucide-react";
+import { ArrowUpRight, DollarSign, CreditCard, Target, PlusCircle, Loader2 } from "lucide-react";
 import Link from "next/link";
-import useLocalStorage from "@/hooks/use-local-storage";
-import type { Expense, Budget, AppSettings } from "@/lib/types";
-import { EXPENSE_CATEGORIES, getCategoryIcon, DEFAULT_APP_SETTINGS } from "@/lib/constants";
-import { format } from 'date-fns';
+import { useUserExpenses } from "@/hooks/use-user-expenses";
+import { useUserBudgets } from "@/hooks/use-user-budgets";
+import { useUserAppSettings } from "@/hooks/use-user-app-settings";
+import type { Expense, Budget } from "@/lib/types";
+import { getCategoryIcon } from "@/lib/constants";
+import { format, parseISO, isValid } from 'date-fns';
 import { formatCurrency } from '@/lib/utils';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/contexts/auth-context';
+import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
-  const [expenses] = useLocalStorage<Expense[]>('expenses', []);
-  const [budgets] = useLocalStorage<Budget[]>('budgets', EXPENSE_CATEGORIES.map(c => ({ id: c.name, category: c.name, amount: 0, spentAmount: 0 })));
-  const [appSettings] = useLocalStorage<AppSettings>('appSettings', DEFAULT_APP_SETTINGS);
-  const [isClient, setIsClient] = useState(false);
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+
+  const { expenses, loading: expensesLoading } = useUserExpenses();
+  const { budgets, loading: budgetsLoading } = useUserBudgets();
+  const { appSettings, loading: settingsLoading } = useUserAppSettings();
 
   useEffect(() => {
-    setIsClient(true);
-  }, []);
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, authLoading, router]);
 
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
   const remainingBudgetGlobal = appSettings.monthlyIncome - totalExpenses;
@@ -36,9 +44,17 @@ export default function DashboardPage() {
     return { ...budget, spentAmount: spent };
   });
   
-  const recentExpenses = [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
+  const recentExpenses = [...expenses].sort((a, b) => {
+    const dateA = parseISO(a.date);
+    const dateB = parseISO(b.date);
+    if (!isValid(dateA)) return 1; // push invalid dates to end
+    if (!isValid(dateB)) return -1;
+    return dateB.getTime() - dateA.getTime();
+  }).slice(0, 5);
 
-  if (!isClient) {
+  const isLoading = authLoading || expensesLoading || budgetsLoading || settingsLoading;
+
+  if (isLoading) {
     return (
       <div className="flex flex-col gap-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -96,6 +112,8 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  if (!user && !authLoading) return null; // Or a login prompt
 
   return (
     <div className="flex flex-col gap-6">
@@ -162,12 +180,13 @@ export default function DashboardPage() {
                 <TableBody>
                   {recentExpenses.map((expense) => {
                     const CategoryIcon = getCategoryIcon(expense.category);
+                    const expenseDate = parseISO(expense.date);
                     return (
                       <TableRow key={expense.id}>
                         <TableCell>
                           <div className="font-medium">{expense.description || expense.category}</div>
                           <div className="text-sm text-muted-foreground hidden md:inline">
-                            {format(new Date(expense.date), "MMM d, yyyy")}
+                            {isValid(expenseDate) ? format(expenseDate, "MMM d, yyyy") : "Invalid Date"}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -196,7 +215,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Budget Progress</CardTitle>
-            <CardDescription>How you're tracking against your category budgets.</CardDescription>
+            <CardDescription>How you&apos;re tracking against your category budgets.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {budgetsWithSpent.filter(b => b.amount > 0).length === 0 ? (
@@ -208,7 +227,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               budgetsWithSpent.filter(b => b.amount > 0).map((budget) => {
-                const progress = budget.amount > 0 ? (budget.spentAmount / budget.amount) * 100 : 0;
+                const progress = budget.amount > 0 ? ((budget.spentAmount || 0) / budget.amount) * 100 : 0;
                 const CategoryIcon = getCategoryIcon(budget.category);
                 return (
                   <div key={budget.category}>
@@ -221,7 +240,7 @@ export default function DashboardPage() {
                         {formatCurrency(budget.spentAmount || 0, appSettings.language, appSettings.currency)} / {formatCurrency(budget.amount, appSettings.language, appSettings.currency)}
                       </span>
                     </div>
-                    <Progress value={Math.min(progress, 100)} className="h-2" />
+                    <Progress value={Math.min(progress, 100)} className="h-2" indicatorClassName={progress > 100 ? 'bg-destructive' : (progress > 75 ? 'bg-yellow-500' : 'bg-primary')} />
                     {progress > 100 && <p className="text-xs text-destructive mt-1">Overspent by {formatCurrency((budget.spentAmount || 0) - budget.amount, appSettings.language, appSettings.currency)}</p>}
                   </div>
                 );
@@ -233,5 +252,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    

@@ -1,3 +1,4 @@
+
 import type { LucideIcon } from 'lucide-react';
 
 export type CategoryName =
@@ -10,7 +11,7 @@ export type CategoryName =
   | 'Shopping'
   | 'Education'
   | 'Savings'
-  | 'Income' // Added Income as a category for tracking
+  | 'Income'
   | 'Other';
 
 export interface Category {
@@ -20,7 +21,8 @@ export interface Category {
 }
 
 export interface Expense {
-  id: string;
+  id: string; // Firestore document ID
+  userId?: string; // To associate with a user, though path implies this
   date: string; // ISO string format (e.g., "2023-10-26T10:00:00.000Z")
   amount: number;
   category: CategoryName;
@@ -28,15 +30,18 @@ export interface Expense {
 }
 
 export interface Budget {
-  id: string; // Using string ID for budgets as well
+  id: string; // Firestore document ID (can be same as category name for simplicity)
+  userId?: string; // To associate with a user
   category: CategoryName;
   amount: number;
-  spentAmount?: number; // Optional: to track spending against budget directly
+  spentAmount?: number; 
 }
 
-// This type is specifically for the AI flow input, not general app income storage
-export interface MonthlyIncomeForAI {
-  amount: number;
+export interface AppSettings {
+  monthlyIncome: number;
+  currency: string; 
+  language: string; 
+  // userId field is not needed here if these settings are stored under /users/{userId}/settings/appSettings
 }
 
 // For chart data
@@ -46,9 +51,15 @@ export interface ChartDataPoint {
   fill?: string;
 }
 
-// New type for application settings
-export interface AppSettings {
-  monthlyIncome: number;
-  currency: string; // e.g., "USD", "XOF", "EUR"
-  language: string; // e.g., "en-US", "fr-FR"
+// For AI Flow
+export interface SuggestBudgetAdjustmentsInput {
+  income: number;
+  expenses: Record<string, number>;
+  budgetGoals: Record<string, number>;
+  language: string; // Added language
+  financialContext?: string; // Added financial context
+}
+
+export interface SuggestBudgetAdjustmentsOutput {
+ suggestions: Record<string, string>;
 }

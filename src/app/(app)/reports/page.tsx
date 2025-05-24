@@ -1,16 +1,20 @@
 
 "use client";
 
-import React, { useMemo, useState, useEffect } from 'react'; // Added useState, useEffect
+import React, { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
-import useLocalStorage from "@/hooks/use-local-storage";
-import type { Expense, Budget, CategoryName, ChartDataPoint, AppSettings } from "@/lib/types";
-import { EXPENSE_CATEGORIES, CATEGORIES_CONFIG, DEFAULT_APP_SETTINGS } from "@/lib/constants";
+import { useUserExpenses } from "@/hooks/use-user-expenses";
+import { useUserBudgets } from "@/hooks/use-user-budgets";
+import { useUserAppSettings } from "@/hooks/use-user-app-settings";
+import type { Expense, Budget, CategoryName, ChartDataPoint } from "@/lib/types";
+import { EXPENSE_CATEGORIES, CATEGORIES_CONFIG } from "@/lib/constants";
 import { TrendingUp, PieChart as PieChartIcon } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/contexts/auth-context';
+import { useRouter } from 'next/navigation';
 
 const RenderActiveShape = (props: any) => { 
   const RADIAN = Math.PI / 180;
@@ -50,8 +54,8 @@ const RenderActiveShape = (props: any) => {
       />
       <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
       <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
-      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="#333">{`${formatCurrency(value, language, currency)}`}</text>
-      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={18} textAnchor={textAnchor} fill="#999">
+      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="hsl(var(--foreground))">{`${formatCurrency(value, language, currency)}`}</text>
+      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={18} textAnchor={textAnchor} fill="hsl(var(--muted-foreground))">
         {`(Rate ${(percent * 100).toFixed(2)}%)`}
       </text>
     </g>
@@ -60,22 +64,33 @@ const RenderActiveShape = (props: any) => {
 
 
 export default function ReportsPage() {
-  const [expenses] = useLocalStorage<Expense[]>('expenses', []);
-  const [budgets] = useLocalStorage<Budget[]>('budgets', EXPENSE_CATEGORIES.map(c => ({ id: c.name, category: c.name, amount: 0 })));
-  const [appSettings] = useLocalStorage<AppSettings>('appSettings', DEFAULT_APP_SETTINGS);
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+
+  const { expenses, loading: expensesLoading } = useUserExpenses();
+  const { budgets, loading: budgetsLoading } = useUserBudgets();
+  const { appSettings, loading: settingsLoading } = useUserAppSettings();
+  
   const [activeIndex, setActiveIndex] = React.useState(0);
-  const [isClient, setIsClient] = useState(false);
+  const [isClientForCharts, setIsClientForCharts] = useState(false); // For Recharts client-side only rendering
 
   useEffect(() => {
-    setIsClient(true);
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, authLoading, router]);
+  
+  useEffect(() => {
+    setIsClientForCharts(true); // Recharts components need to be client-side
   }, []);
+
 
   const onPieEnter = (_: any, index: number) => {
     setActiveIndex(index);
   };
 
   const spendingByCategory: ChartDataPoint[] = useMemo(() => {
-    if (!isClient) return []; 
+    if (!isClientForCharts) return []; 
 
     const categoryTotals: Record<CategoryName, number> = {} as Record<CategoryName, number>;
     EXPENSE_CATEGORIES.forEach(cat => categoryTotals[cat.name] = 0);
@@ -89,24 +104,24 @@ export default function ReportsPage() {
     return EXPENSE_CATEGORIES.map(cat => {
       const colorConfig = CATEGORIES_CONFIG[cat.name];
       let fillColor = colorConfig?.color;
-      if (colorConfig?.color && colorConfig.color.startsWith('var(') && typeof window !== 'undefined') {
+      // Attempt to resolve CSS variable color, only on client
+      if (typeof window !== 'undefined' && colorConfig?.color && colorConfig.color.startsWith('var(')) {
          try {
             fillColor = `hsl(${getComputedStyle(document.documentElement).getPropertyValue(colorConfig.color.slice(4, -1)).trim()})`;
          } catch (e) {
             console.warn("Could not compute style for chart color", e);
-            // Use default color if var cannot be resolved
          }
       }
       return {
         name: cat.name,
         value: categoryTotals[cat.name] || 0,
-        fill: fillColor || '#8884d8', // Fallback fill color
+        fill: fillColor || '#8884d8', 
       };
     }).filter(item => item.value > 0);
-  }, [expenses, isClient]);
+  }, [expenses, isClientForCharts]);
 
   const budgetVsActualData = useMemo(() => {
-    if (!isClient) return [];
+    if (!isClientForCharts) return [];
     return budgets.filter(b => b.amount > 0).map(budget => {
       const actualSpending = expenses
         .filter(exp => exp.category === budget.category)
@@ -115,37 +130,13 @@ export default function ReportsPage() {
         name: budget.category,
         budget: budget.amount,
         actual: actualSpending,
-        // Recharts might not directly support CSS variables in `fill`.
-        // If these are var(--some-css-var), they might need to be resolved to HSL/HEX in JS like spendingByCategory.
-        // For now, assuming these theme variables are directly usable or simple colors.
-        fillBudget: 'hsl(var(--primary) / 0.6)',
+        fillBudget: 'hsl(var(--primary) / 0.6)', // Direct HSL strings
         fillActual: 'hsl(var(--accent))',
       };
     });
-  }, [budgets, expenses, isClient]);
+  }, [budgets, expenses, isClientForCharts]);
 
-
-  if (!isClient && (expenses.length === 0 && budgets.filter(b => b.amount > 0).length === 0)) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] text-center">
-        <TrendingUp className="mx-auto h-16 w-16 text-muted-foreground mb-6" />
-        <Skeleton className="h-6 w-48 mb-2" />
-        <Skeleton className="h-4 w-64" />
-      </div>
-    );
-  }
-  
-  if (isClient && expenses.length === 0 && budgets.filter(b => b.amount > 0).length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] text-center">
-        <TrendingUp className="mx-auto h-16 w-16 text-muted-foreground mb-6" />
-        <h2 className="text-2xl font-semibold mb-2">No Data for Reports</h2>
-        <p className="text-muted-foreground">
-          Start by adding some <Link href="/expenses" className="text-primary hover:underline">expenses</Link> or setting up <Link href="/budgets" className="text-primary hover:underline">budgets</Link>.
-        </p>
-      </div>
-    );
-  }
+  const isLoading = authLoading || expensesLoading || budgetsLoading || settingsLoading;
 
   const pieChartActiveShape = (props: any) => (
     <RenderActiveShape {...props} language={appSettings.language} currency={appSettings.currency} />
@@ -174,15 +165,31 @@ export default function ReportsPage() {
                 <Skeleton className="h-[40%] w-10" />
                 <Skeleton className="h-[70%] w-10" />
             </div>
-             <Skeleton className="h-2 w-full mt-2" /> {/* X-axis line */}
+             <Skeleton className="h-2 w-full mt-2" /> 
           </CardContent>
         </Card>
     </div>
   );
 
-  if (!isClient) {
+  if (isLoading) {
     return renderChartSkeletons();
   }
+  
+  if (!user && !authLoading) return null; // Or a login prompt
+
+
+  if (isClientForCharts && expenses.length === 0 && budgets.filter(b => b.amount > 0).length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] text-center">
+        <TrendingUp className="mx-auto h-16 w-16 text-muted-foreground mb-6" />
+        <h2 className="text-2xl font-semibold mb-2">No Data for Reports</h2>
+        <p className="text-muted-foreground">
+          Start by adding some <Link href="/expenses" className="text-primary hover:underline">expenses</Link> or setting up <Link href="/budgets" className="text-primary hover:underline">budgets</Link>.
+        </p>
+      </div>
+    );
+  }
+
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -192,7 +199,7 @@ export default function ReportsPage() {
           <CardDescription>Visual breakdown of your expenses across different categories.</CardDescription>
         </CardHeader>
         <CardContent>
-          {spendingByCategory.length > 0 ? (
+          {isClientForCharts && spendingByCategory.length > 0 ? (
             <ResponsiveContainer width="100%" height={350}>
               <PieChart>
                 <Pie
@@ -213,13 +220,13 @@ export default function ReportsPage() {
                 <Tooltip formatter={(value: number) => formatCurrency(value, appSettings.language, appSettings.currency)} />
               </PieChart>
             </ResponsiveContainer>
-          ) : (
+          ) : isClientForCharts ? (
             <div className="flex flex-col items-center justify-center h-[350px] text-center">
               <PieChartIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground">No spending data to display for this chart.</p>
               <p className="text-sm text-muted-foreground">Add some expenses to see your spending breakdown.</p>
             </div>
-          )}
+          ) : renderChartSkeletons() /* Show skeleton if not client for charts yet */ }
         </CardContent>
       </Card>
 
@@ -229,9 +236,9 @@ export default function ReportsPage() {
           <CardDescription>Compare your budgeted amounts with actual spending for each category.</CardDescription>
         </CardHeader>
         <CardContent>
-          {budgetVsActualData.length > 0 ? (
+          {isClientForCharts && budgetVsActualData.length > 0 ? (
           <ResponsiveContainer width="100%" height={350}>
-            <BarChart data={budgetVsActualData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+            <BarChart data={budgetVsActualData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="name" stroke="hsl(var(--foreground))" tick={{ fontSize: 12 }} />
               <YAxis 
@@ -247,21 +254,19 @@ export default function ReportsPage() {
                 labelStyle={{ color: 'hsl(var(--popover-foreground))' }}
               />
               <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Bar dataKey="budget" name="Budgeted" fill="var(--primary-foreground)" barSize={20} radius={[4, 4, 0, 0]} />
-              <Bar dataKey="actual" name="Actual Spending" fill="var(--accent)" barSize={20} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="budget" name="Budgeted" fill="hsl(var(--primary))" barSize={20} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="actual" name="Actual Spending" fill="hsl(var(--accent))" barSize={20} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-          ) : (
+          ) : isClientForCharts ? (
             <div className="flex flex-col items-center justify-center h-[350px] text-center">
               <TrendingUp className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground">No budget data to display comparison.</p>
               <p className="text-sm text-muted-foreground">Set some budgets to compare with your spending.</p>
             </div>
-          )}
+          ) : renderChartSkeletons() }
         </CardContent>
       </Card>
     </div>
   );
 }
-
-    

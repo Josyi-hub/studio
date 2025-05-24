@@ -1,8 +1,9 @@
+
 // @ts-nocheck
 "use client";
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Sidebar,
   SidebarHeader,
@@ -13,13 +14,13 @@ import {
   SidebarFooter,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { APP_NAME } from '@/lib/constants';
-import { Home, LogOut, Settings, BarChart3, Sparkles, ShoppingBag, PiggyBank } from 'lucide-react'; // Updated icons
+import { Home, LogOut, Settings, BarChart3, Sparkles, ShoppingBag, PiggyBank } from 'lucide-react'; 
 import { Separator } from '../ui/separator';
+import { useAuth } from '@/contexts/auth-context';
+import { useToast } from '@/hooks/use-toast';
 
-// Update NAV_LINKS icons to actual Lucide components
 const NAVIGATION_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/expenses', label: 'Expenses', icon: ShoppingBag },
@@ -31,6 +32,19 @@ const NAVIGATION_ITEMS = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, signOut } = useAuth();
+  const { toast } = useToast();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      toast({ title: "Logged Out", description: "You have been successfully logged out." });
+      router.push('/login');
+    } catch (error) {
+      toast({ title: "Logout Error", description: "Failed to log out. Please try again.", variant: "destructive" });
+    }
+  };
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" side="left">
@@ -76,12 +90,14 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </Link>
           </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton className="w-full justify-start" variant="destructive" tooltip="Logout">
-              <LogOut className="h-5 w-5" />
-              <span className="group-data-[collapsible=icon]:hidden">Logout</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          {user && (
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={handleLogout} className="w-full justify-start" variant="destructive" tooltip="Logout">
+                <LogOut className="h-5 w-5" />
+                <span className="group-data-[collapsible=icon]:hidden">Logout</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
