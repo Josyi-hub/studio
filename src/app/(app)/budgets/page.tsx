@@ -8,18 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Edit, Save, Target } from "lucide-react";
 import useLocalStorage from "@/hooks/use-local-storage";
-import type { Budget, Expense, CategoryName } from "@/lib/types";
-import { EXPENSE_CATEGORIES, getCategoryIcon, DEFAULT_BUDGETS } from "@/lib/constants";
+import type { Budget, Expense, CategoryName, AppSettings } from "@/lib/types";
+import { EXPENSE_CATEGORIES, getCategoryIcon, DEFAULT_BUDGETS, DEFAULT_APP_SETTINGS } from "@/lib/constants";
 import { useToast } from '@/hooks/use-toast';
-
-// Helper to format currency
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-};
+import { formatCurrency } from '@/lib/utils';
 
 export default function BudgetsPage() {
   const [budgets, setBudgets] = useLocalStorage<Budget[]>('budgets', DEFAULT_BUDGETS);
   const [expenses] = useLocalStorage<Expense[]>('expenses', []);
+  const [appSettings] = useLocalStorage<AppSettings>('appSettings', DEFAULT_APP_SETTINGS);
   const [editingBudgets, setEditingBudgets] = useState<Record<CategoryName, string>>({});
   const { toast } = useToast();
 
@@ -94,7 +91,7 @@ export default function BudgetsPage() {
                   <span className="text-muted-foreground">/ month</span>
                 </div>
               ) : (
-                <p className="text-2xl font-semibold text-primary">{formatCurrency(budget.amount)}
+                <p className="text-2xl font-semibold text-primary">{formatCurrency(budget.amount, appSettings.language, appSettings.currency)}
                   <span className="text-sm font-normal text-muted-foreground"> / month</span>
                 </p>
               )}
@@ -102,13 +99,13 @@ export default function BudgetsPage() {
               {budget.amount > 0 && (
                 <div className="mt-3">
                   <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                    <span>Spent: {formatCurrency(spentAmount)}</span>
-                    <span>Remaining: {formatCurrency(budget.amount - spentAmount)}</span>
+                    <span>Spent: {formatCurrency(spentAmount, appSettings.language, appSettings.currency)}</span>
+                    <span>Remaining: {formatCurrency(budget.amount - spentAmount, appSettings.language, appSettings.currency)}</span>
                   </div>
                   <Progress value={Math.min(progress, 100)} className="h-2" 
                     indicatorClassName={progress > 100 ? 'bg-destructive' : (progress > 75 ? 'bg-yellow-500' : 'bg-primary')}
                   />
-                  {progress > 100 && <p className="text-xs text-destructive mt-1">Overspent by {formatCurrency(spentAmount - budget.amount)}</p>}
+                  {progress > 100 && <p className="text-xs text-destructive mt-1">Overspent by {formatCurrency(spentAmount - budget.amount, appSettings.language, appSettings.currency)}</p>}
                 </div>
               )}
               {budget.amount === 0 && !isEditing && (

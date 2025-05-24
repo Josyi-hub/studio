@@ -34,7 +34,8 @@ export interface Budget {
   spentAmount?: number; // Optional: to track spending against budget directly
 }
 
-export interface MonthlyIncome {
+// This type is specifically for the AI flow input, not general app income storage
+export interface MonthlyIncomeForAI {
   amount: number;
 }
 
@@ -43,4 +44,11 @@ export interface ChartDataPoint {
   name: string;
   value: number;
   fill?: string;
+}
+
+// New type for application settings
+export interface AppSettings {
+  monthlyIncome: number;
+  currency: string; // e.g., "USD", "XOF", "EUR"
+  language: string; // e.g., "en-US", "fr-FR"
 }

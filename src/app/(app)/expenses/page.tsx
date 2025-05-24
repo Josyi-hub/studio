@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState } from 'react';
@@ -18,10 +17,11 @@ import { useForm, Controller, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import useLocalStorage from "@/hooks/use-local-storage";
-import type { Expense, CategoryName } from "@/lib/types";
-import { EXPENSE_CATEGORIES, getCategoryIcon } from "@/lib/constants";
+import type { Expense, CategoryName, AppSettings } from "@/lib/types";
+import { EXPENSE_CATEGORIES, getCategoryIcon, DEFAULT_APP_SETTINGS } from "@/lib/constants";
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { formatCurrency } from '@/lib/utils';
 
 const expenseSchema = z.object({
   id: z.string().optional(),
@@ -35,6 +35,7 @@ type ExpenseFormData = z.infer<typeof expenseSchema>;
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useLocalStorage<Expense[]>('expenses', []);
+  const [appSettings] = useLocalStorage<AppSettings>('appSettings', DEFAULT_APP_SETTINGS);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const { toast } = useToast();
@@ -137,7 +138,7 @@ export default function ExpensesPage() {
                     {expense.category}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right">${expense.amount.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{formatCurrency(expense.amount, appSettings.language, appSettings.currency)}</TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" onClick={() => openEditDialog(expense)}>
                     <Edit className="h-4 w-4" />
@@ -237,4 +238,3 @@ export default function ExpensesPage() {
     </Card>
   );
 }
-

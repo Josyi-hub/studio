@@ -8,25 +8,19 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowUpRight, DollarSign, CreditCard, Target, PlusCircle } from "lucide-react";
 import Link from "next/link";
 import useLocalStorage from "@/hooks/use-local-storage";
-import type { Expense, Budget, MonthlyIncome } from "@/lib/types";
-import { EXPENSE_CATEGORIES, getCategoryIcon } from "@/lib/constants";
+import type { Expense, Budget, AppSettings } from "@/lib/types";
+import { EXPENSE_CATEGORIES, getCategoryIcon, DEFAULT_APP_SETTINGS } from "@/lib/constants";
 import { format } from 'date-fns';
-
-// Helper to format currency
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-};
+import { formatCurrency } from '@/lib/utils';
 
 export default function DashboardPage() {
   const [expenses] = useLocalStorage<Expense[]>('expenses', []);
   const [budgets] = useLocalStorage<Budget[]>('budgets', EXPENSE_CATEGORIES.map(c => ({ id: c.name, category: c.name, amount: 0, spentAmount: 0 })));
-  const [monthlyIncome] = useLocalStorage<MonthlyIncome>('monthlyIncome', { amount: 0 });
+  const [appSettings] = useLocalStorage<AppSettings>('appSettings', DEFAULT_APP_SETTINGS);
 
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-  const totalBudget = budgets.reduce((sum, bud) => sum + bud.amount, 0);
-  const remainingBudgetGlobal = monthlyIncome.amount - totalExpenses;
+  const remainingBudgetGlobal = appSettings.monthlyIncome - totalExpenses;
 
-  // Calculate spent amount for each budget category
   const budgetsWithSpent = budgets.map(budget => {
     const spent = expenses
       .filter(exp => exp.category === budget.category)
@@ -45,7 +39,7 @@ export default function DashboardPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(monthlyIncome.amount)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(appSettings.monthlyIncome, appSettings.language, appSettings.currency)}</div>
             <p className="text-xs text-muted-foreground">Current monthly income</p>
           </CardContent>
         </Card>
@@ -55,10 +49,8 @@ export default function DashboardPage() {
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalExpenses)}</div>
-            <p className="text-xs text-muted-foreground">
-              {/* Placeholder for comparison, e.g. vs last month */}
-            </p>
+            <div className="text-2xl font-bold">{formatCurrency(totalExpenses, appSettings.language, appSettings.currency)}</div>
+            {/* <p className="text-xs text-muted-foreground"> vs last month </p> */}
           </CardContent>
         </Card>
         <Card>
@@ -68,7 +60,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${remainingBudgetGlobal < 0 ? 'text-destructive' : 'text-green-600'}`}>
-              {formatCurrency(remainingBudgetGlobal)}
+              {formatCurrency(remainingBudgetGlobal, appSettings.language, appSettings.currency)}
             </div>
             <p className="text-xs text-muted-foreground">
               Based on income vs expenses
@@ -117,7 +109,7 @@ export default function DashboardPage() {
                             {expense.category}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(expense.amount, appSettings.language, appSettings.currency)}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -159,11 +151,11 @@ export default function DashboardPage() {
                         {budget.category}
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        {formatCurrency(budget.spentAmount || 0)} / {formatCurrency(budget.amount)}
+                        {formatCurrency(budget.spentAmount || 0, appSettings.language, appSettings.currency)} / {formatCurrency(budget.amount, appSettings.language, appSettings.currency)}
                       </span>
                     </div>
                     <Progress value={Math.min(progress, 100)} className="h-2" />
-                    {progress > 100 && <p className="text-xs text-destructive mt-1">Overspent by {formatCurrency((budget.spentAmount || 0) - budget.amount)}</p>}
+                    {progress > 100 && <p className="text-xs text-destructive mt-1">Overspent by {formatCurrency((budget.spentAmount || 0) - budget.amount, appSettings.language, appSettings.currency)}</p>}
                   </div>
                 );
               })

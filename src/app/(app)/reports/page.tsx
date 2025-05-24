@@ -1,21 +1,18 @@
 "use client";
 
 import React, { useMemo } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
 import useLocalStorage from "@/hooks/use-local-storage";
-import type { Expense, Budget, CategoryName, ChartDataPoint } from "@/lib/types";
-import { EXPENSE_CATEGORIES, CATEGORIES_CONFIG } from "@/lib/constants";
+import type { Expense, Budget, CategoryName, ChartDataPoint, AppSettings } from "@/lib/types";
+import { EXPENSE_CATEGORIES, CATEGORIES_CONFIG, DEFAULT_APP_SETTINGS } from "@/lib/constants";
 import { TrendingUp, PieChart as PieChartIcon } from 'lucide-react';
+import { formatCurrency } from '@/lib/utils';
 
-// Helper to format currency for tooltips/axis
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-};
-
-const renderActiveShape = (props: any) => {
+const RenderActiveShape = (props: any) => { // Renamed to avoid conflict, ensure it's capitalized for a component
   const RADIAN = Math.PI / 180;
-  const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
+  const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value, language, currency } = props;
   const sin = Math.sin(-RADIAN * midAngle);
   const cos = Math.cos(-RADIAN * midAngle);
   const sx = cx + (outerRadius + 10) * cos;
@@ -51,7 +48,7 @@ const renderActiveShape = (props: any) => {
       />
       <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
       <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
-      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="#333">{`${formatCurrency(value)}`}</text>
+      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="#333">{`${formatCurrency(value, language, currency)}`}</text>
       <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={18} textAnchor={textAnchor} fill="#999">
         {`(Rate ${(percent * 100).toFixed(2)}%)`}
       </text>
@@ -63,6 +60,7 @@ const renderActiveShape = (props: any) => {
 export default function ReportsPage() {
   const [expenses] = useLocalStorage<Expense[]>('expenses', []);
   const [budgets] = useLocalStorage<Budget[]>('budgets', EXPENSE_CATEGORIES.map(c => ({ id: c.name, category: c.name, amount: 0 })));
+  const [appSettings] = useLocalStorage<AppSettings>('appSettings', DEFAULT_APP_SETTINGS);
   const [activeIndex, setActiveIndex] = React.useState(0);
 
   const onPieEnter = (_: any, index: number) => {
@@ -79,10 +77,14 @@ export default function ReportsPage() {
       }
     });
     
+    // Note: getComputedStyle might cause hydration issues if styles are not ready on server/initial client render.
+    // Consider moving color resolution to a useEffect if problems arise.
     return EXPENSE_CATEGORIES.map(cat => ({
       name: cat.name,
       value: categoryTotals[cat.name] || 0,
-      fill: CATEGORIES_CONFIG[cat.name]?.color.startsWith('var(') ? `hsl(${getComputedStyle(document.documentElement).getPropertyValue(CATEGORIES_CONFIG[cat.name]?.color.slice(4, -1)).trim()})` : CATEGORIES_CONFIG[cat.name]?.color,
+      fill: typeof window !== 'undefined' && CATEGORIES_CONFIG[cat.name]?.color.startsWith('var(') ? 
+            `hsl(${getComputedStyle(document.documentElement).getPropertyValue(CATEGORIES_CONFIG[cat.name]?.color.slice(4, -1)).trim()})` : 
+            CATEGORIES_CONFIG[cat.name]?.color,
     })).filter(item => item.value > 0);
   }, [expenses]);
 
@@ -95,8 +97,8 @@ export default function ReportsPage() {
         name: budget.category,
         budget: budget.amount,
         actual: actualSpending,
-        fillBudget: 'hsl(var(--primary) / 0.6)', // Use CSS variable for primary with opacity
-        fillActual: 'hsl(var(--accent))', // Use CSS variable for accent
+        fillBudget: 'hsl(var(--primary) / 0.6)',
+        fillActual: 'hsl(var(--accent))',
       };
     });
   }, [budgets, expenses]);
@@ -114,6 +116,10 @@ export default function ReportsPage() {
     );
   }
 
+  const pieChartActiveShape = (props: any) => (
+    <RenderActiveShape {...props} language={appSettings.language} currency={appSettings.currency} />
+  );
+
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -128,7 +134,7 @@ export default function ReportsPage() {
               <PieChart>
                 <Pie
                   activeIndex={activeIndex}
-                  activeShape={renderActiveShape}
+                  activeShape={pieChartActiveShape}
                   data={spendingByCategory}
                   cx="50%"
                   cy="50%"
@@ -138,10 +144,10 @@ export default function ReportsPage() {
                   onMouseEnter={onPieEnter}
                 >
                   {spendingByCategory.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                    <Cell key={`cell-${index}`} fill={entry.fill || '#8884d8'} /> // Added fallback fill
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Tooltip formatter={(value: number) => formatCurrency(value, appSettings.language, appSettings.currency)} />
               </PieChart>
             </ResponsiveContainer>
           ) : (
@@ -165,9 +171,14 @@ export default function ReportsPage() {
             <BarChart data={budgetVsActualData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="name" stroke="hsl(var(--foreground))" tick={{ fontSize: 12 }} />
-              <YAxis stroke="hsl(var(--foreground))" tickFormatter={(value) => `$${value / 1000}k`} tick={{ fontSize: 12 }} />
+              <YAxis 
+                stroke="hsl(var(--foreground))" 
+                tickFormatter={(value) => formatCurrency(value, appSettings.language, appSettings.currency).replace(/\.00$/, '')} // Basic attempt to shorten if no decimals
+                tick={{ fontSize: 12 }} 
+                width={80} // Adjust width for potentially longer currency strings
+              />
               <Tooltip 
-                formatter={(value: number, name: string) => [formatCurrency(value), name === 'budget' ? 'Budgeted' : 'Actual Spending']}
+                formatter={(value: number, name: string) => [formatCurrency(value, appSettings.language, appSettings.currency), name === 'budget' ? 'Budgeted' : 'Actual Spending']}
                 cursor={{ fill: 'hsl(var(--muted))' }}
                 contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))' }}
                 labelStyle={{ color: 'hsl(var(--popover-foreground))' }}
