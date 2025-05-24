@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,9 +17,16 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const { signUp, loading } = useAuth();
+  const { signUp, user, loading } = useAuth(); // user and loading added from context
   const router = useRouter();
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Redirect to dashboard if user is already logged in and auth state is resolved
+    if (!loading && user) {
+      router.push('/dashboard');
+    }
+  }, [user, loading, router]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +56,15 @@ export default function SignupPage() {
         router.push('/dashboard');
     }
   };
+
+  // Prevent rendering the form if user is logged in and redirection is imminent
+  if (loading || (!loading && user)) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background p-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
